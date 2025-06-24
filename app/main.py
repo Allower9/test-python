@@ -1,20 +1,35 @@
-import asyncpg
+# app/main.py
 from fastapi import FastAPI
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 app = FastAPI()
 
-DATABASE_URL = "postgresql://myappuser:secretpassword@192.168.1.126:5432/myappdb"
+# Подключение к БД
+DATABASE_URL = "postgresql://myappuser:secretpassword@192.168.1.126/myappdb"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
 
-@app.on_event("startup")
-async def startup():
-    app.state.db = await asyncpg.connect(DATABASE_URL)
+# Модель таблицы
+class Item(Base):
+    __tablename__ = "items"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
 
-@app.on_event("shutdown")
-async def shutdown():
-    await app.state.db.close()
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
-async def read_root():
-    row = await app.state.db.fetchrow("SELECT 'Hello from PostgreSQL!' AS message;")
-    return {"message": row["message"]}
+def read_root():
+    db = SessionLocal()
+    items = db.query(Item).all()
+    return {"items": [item.name for item in items]}
+
+@app.post("/add/{name}")
+def add_item(name: str):
+    db = SessionLocal()
+    item = Item(name=name)
+    db.add(item)
+    db.commit()
+    return {"message": f"Added {name}"}
 
